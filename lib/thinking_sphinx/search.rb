@@ -164,21 +164,26 @@ module ThinkingSphinx
       # 
       def search(*args)
         results, client = search_results(*args.clone)
-        
+
         ::ActiveRecord::Base.logger.error(
           "Sphinx Error: #{results[:error]}"
         ) if results[:error]
-        
+
         options = args.extract_options!
         klass   = options[:class]
         page    = options[:page] ? options[:page].to_i : 1
-        
+
         begin
           pager = WillPaginate::Collection.new(page,
             client.limit, results[:total] || 0)
-          pager.replace instances_from_results(results[:matches], options, klass)
+          tmp = pager.replace instances_from_results(results[:matches], options, klass)
+          return (options[:include_raw] ? [tmp, results] : tmp)
         rescue StandardError => err
-          instances_from_results(results[:matches], options, klass)
+          if options[:include_raw]
+            return instances_from_results(results[:matches], options, klass), results
+          else
+            return instances_from_results(results[:matches], options, klass)
+          end
         end
       end
       
