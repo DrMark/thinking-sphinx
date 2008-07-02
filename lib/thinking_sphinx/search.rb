@@ -21,9 +21,14 @@ module ThinkingSphinx
         begin
           pager = WillPaginate::Collection.new(page,
             client.limit, results[:total] || 0)
-          pager.replace results[:matches].collect { |match| match[:doc] }
+          tmp = pager.replace results[:matches].collect { |match| match[:doc] }
+          return (options[:include_raw] ? [tmp, results] : tmp)
         rescue
-          results[:matches].collect { |match| match[:doc] }
+          if options[:include_raw]
+            return results[:matches].collect { |match| match[:doc] }, results
+          else
+            return results[:matches].collect { |match| match[:doc] }
+          end
         end
       end
 
