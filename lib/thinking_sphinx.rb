@@ -52,10 +52,12 @@ module ThinkingSphinx
     @@define_indexes = value
   end
   
+  @@deltas_enabled = nil
+
   # Check if delta indexing is enabled.
   # 
   def self.deltas_enabled?
-    @@deltas_enabled =  true unless defined?(@@deltas_enabled)
+    @@deltas_enabled  = (ThinkingSphinx::Configuration.environment != 'test') if @@deltas_enabled.nil?
     @@deltas_enabled == true
   end
   

@@ -125,12 +125,6 @@ describe "ThinkingSphinx::ActiveRecord" do
       @person.stub_method(:in_core_index? => true)
     end
     
-    # after :each do
-    #   ThinkingSphinx::Configuration.unstub_method(:new)
-    #   Riddle::Client.unstub_method(:new)
-    #   Person.indexes.each { |index| index.unstub_method(:delta?) }
-    # end
-    
     it "should create a client using the Configuration's address and port" do
       @person.toggle_deleted
       
@@ -157,7 +151,8 @@ describe "ThinkingSphinx::ActiveRecord" do
       )
     end
     
-    it "should update the delta index's deleted flag if delta indexing is enabled and the instance's delta is true" do
+    it "should update the delta index's deleted flag if delta indexes are enabled and the instance's delta is true" do
+      ThinkingSphinx.stub_method(:deltas_enabled? => true)
       Person.indexes.each { |index| index.stub_method(:delta? => true) }
       @person.delta = true
       
@@ -168,7 +163,8 @@ describe "ThinkingSphinx::ActiveRecord" do
       )
     end
     
-    it "should not update the delta index's deleted flag if delta indexing is enabled and the instance's delta is false" do
+    it "should not update the delta index's deleted flag if delta indexes are enabled and the instance's delta is false" do
+      ThinkingSphinx.stub_method(:deltas_enabled? => true)
       Person.indexes.each { |index| index.stub_method(:delta? => true) }
       @person.delta = false
       
@@ -179,7 +175,8 @@ describe "ThinkingSphinx::ActiveRecord" do
       )
     end
     
-    it "should not update the delta index's deleted flag if delta indexing is enabled and the instance's delta is equivalent to false" do
+    it "should not update the delta index's deleted flag if delta indexes are enabled and the instance's delta is equivalent to false" do
+      ThinkingSphinx.stub_method(:deltas_enabled? => true)
       Person.indexes.each { |index| index.stub_method(:delta? => true) }
       @person.delta = 0
 
@@ -190,7 +187,20 @@ describe "ThinkingSphinx::ActiveRecord" do
       )
     end
 
-    it "shouldn't update the delta index if delta indexing is disabled" do
+    it "shouldn't update the delta index if delta indexes are disabled" do
+      ThinkingSphinx.stub_method(:deltas_enabled? => true)
+      @person.toggle_deleted
+      
+      @client.should_not have_received(:update).with(
+        "person_delta", ["sphinx_deleted"], {@person.id => 1}
+      )
+    end
+    
+    it "should not update the delta index if delta indexing is disabled" do
+      ThinkingSphinx.stub_method(:deltas_enabled? => false)
+      Person.indexes.each { |index| index.stub_method(:delta? => true) }
+      @person.delta = true
+      
       @person.toggle_deleted
       
       @client.should_not have_received(:update).with(
@@ -200,11 +210,14 @@ describe "ThinkingSphinx::ActiveRecord" do
   end
 
   describe "indexes in the inheritance chain (STI)" do
-
     it "should hand defined indexes on a class down to its child classes" do
-      Child.indexes.should == Person.indexes
+      Child.indexes.should include(*Person.indexes)
     end
 
+    it "should allow associations to other STI models" do
+      Child.indexes.last.link!
+      sql = Child.indexes.last.to_sql.gsub('$start', '0').gsub('$end', '100')
+      lambda { Child.connection.execute(sql) }.should_not raise_error(ActiveRecord::StatementInvalid)
+    end
   end
-
 end

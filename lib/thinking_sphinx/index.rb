@@ -41,6 +41,11 @@ module ThinkingSphinx
       model.name.underscore.tr(':/\\', '_')
     end
     
+    def empty?(part = :core)
+      config = ThinkingSphinx::Configuration.new
+      File.size?("#{config.searchd_file_path}/#{self.name}_#{part}.spa").nil?
+    end
+    
     def to_config(index, database_conf, charset_type)
       # Set up associations and joins
       link!
@@ -252,7 +257,7 @@ GROUP BY #{ (
       
       unless @model.descends_from_active_record?
         stored_class = @model.store_full_sti_class ? @model.name : @model.name.demodulize
-        builder.where("#{@model.inheritance_column} = '#{stored_class}'")
+        builder.where("#{@model.quoted_table_name}.#{quote_column(@model.inheritance_column)} = '#{stored_class}'")
       end
 
       @fields     = builder.fields
