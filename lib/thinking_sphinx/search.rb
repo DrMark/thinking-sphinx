@@ -24,6 +24,7 @@ module ThinkingSphinx
             collection.replace results[:matches].collect { |match| match[:doc] }
             collection.instance_variable_set :@total_entries, results[:total_found]
           end
+          return (options[:include_raw] ? [pager, results] : pager)
         rescue
           if options[:include_raw]
             return results[:matches].collect { |match| match[:doc] }, results
@@ -203,6 +204,7 @@ module ThinkingSphinx
             collection.replace instances_from_results(results[:matches], options, klass)
             collection.instance_variable_set :@total_entries, results[:total_found]
           end
+          return (options[:include_raw] ? [pager, results] : pager)
         rescue StandardError => err
           if options[:include_raw]
             return instances_from_results(results[:matches], options, klass), results
