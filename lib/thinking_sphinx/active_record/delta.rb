@@ -73,7 +73,17 @@ module ThinkingSphinx
           # if running in the test environment.
           # 
           def index_delta
-            return true unless ThinkingSphinx.deltas_enabled?
+            return true unless ThinkingSphinx.updates_enabled? &&
+              ThinkingSphinx.deltas_enabled?
+            
+            config = ThinkingSphinx::Configuration.new
+            client = Riddle::Client.new config.address, config.port
+            
+            client.update(
+              "#{self.class.indexes.first.name}_core",
+              ['sphinx_deleted'],
+              {self.id => 1}
+            ) if self.in_core_index?
             
             configuration = ThinkingSphinx::Configuration.new
             system "indexer --config #{configuration.config_file} --rotate #{self.class.indexes.first.name}_delta"
