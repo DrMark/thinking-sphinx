@@ -214,6 +214,11 @@ module ThinkingSphinx
         end
       end
 
+      def count(*args)
+        results, client = search_results(*args.clone)
+        results[:total] || 0
+      end
+
       # Checks if a document with the given id exists within a specific index.
       # Expected parameters:
       #

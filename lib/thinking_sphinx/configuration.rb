@@ -29,10 +29,9 @@ module ThinkingSphinx
   # config/sphinx.yml with settings for each environment, in a similar
   # fashion to database.yml - using the following keys: config_file,
   # searchd_log_file, query_log_file, pid_file, searchd_file_path, port,
-  # allow_star, min_prefix_len, min_infix_len, mem_limit, max_matches,
-  # morphology, charset_type, charset_table, ignore_chars, html_strip,
-  # html_remove_elements. I think you've got
-  # the idea.
+  # allow_star, enable_star, min_prefix_len, min_infix_len, mem_limit,
+  # max_matches, # morphology, charset_type, charset_table, ignore_chars,
+  # html_strip, # html_remove_elements. I think you've got the idea.
   # 
   # Each setting in the YAML file is optional - so only put in the ones you
   # want to change.
@@ -43,9 +42,9 @@ module ThinkingSphinx
   # 
   class Configuration
     attr_accessor :config_file, :searchd_log_file, :query_log_file,
-      :pid_file, :searchd_file_path, :address, :port, :allow_star,
-      :min_prefix_len, :min_infix_len, :mem_limit, :max_matches, :morphology,
-      :charset_type, :charset_table, :ignore_chars, :html_strip,
+      :pid_file, :searchd_file_path, :address, :port, :enable_star,
+      :allow_star, :min_prefix_len, :min_infix_len, :mem_limit, :max_matches,
+      :morphology, :charset_type, :charset_table, :ignore_chars, :html_strip,
       :html_remove_elements, :app_root
     
     attr_reader :environment
@@ -66,8 +65,9 @@ module ThinkingSphinx
       self.address              = "127.0.0.1"
       self.port                 = 3312
       self.allow_star           = false
-      self.min_prefix_len       = 1
-      self.min_infix_len        = 1
+      self.enable_star          = false
+      self.min_prefix_len       = nil
+      self.min_infix_len        = nil
       self.mem_limit            = "64M"
       self.max_matches          = 1000
       self.morphology           = "stem_en"
@@ -209,20 +209,26 @@ INDEX
       output += "  ignore_chars   = #{self.ignore_chars}\n"  unless self.ignore_chars.nil?
       
       if self.allow_star
+        # Ye Olde way of turning on enable_star
         output += "  enable_star    = 1\n"
         output += "  min_prefix_len = #{self.min_prefix_len}\n"
-        output += "  min_infix_len  = #{self.min_infix_len}\n"
+      else
+        # New, better way of turning on enable_star - thanks to James Healy
+        output += "  enable_star    = 1\n" if self.enable_star
+        output += "  min_prefix_len = #{self.min_prefix_len}\n" unless self.min_prefix_len.nil?
+        output += "  min_infix_len  = #{self.min_infix_len}\n" unless self.min_infix_len.nil?
       end
       
+
       output += "  html_strip     = 1\n" if self.html_strip
       output += "  html_remove_elements = #{self.html_remove_elements}\n" unless self.html_remove_elements.blank?
 
       unless model.indexes.collect(&:prefix_fields).flatten.empty?
-        output += "  prefix_fields = #{model.indexes.collect(&:prefix_fields).flatten.join(', ')}\n"
+        output += "  prefix_fields = #{model.indexes.collect(&:prefix_fields).flatten.map(&:unique_name).join(', ')}\n"
       end
       
       unless model.indexes.collect(&:infix_fields).flatten.empty?
-        output += "  infix_fields  = #{model.indexes.collect(&:infix_fields).flatten.join(', ')}\n"
+        output += "  infix_fields  = #{model.indexes.collect(&:infix_fields).flatten.map(&:unique_name).join(', ')}\n"
       end
       
       output + "}\n"
