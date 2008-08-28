@@ -29,9 +29,9 @@ module ThinkingSphinx
           return (options[:include_raw] ? [pager, results] : pager)
         rescue
           if options[:include_raw]
-            results[:matches].collect { |match| match[:attributes]["sphinx_internal_id"] }, results
+            return results[:matches].collect{ |match| match[:attributes]["sphinx_internal_id"] }, results
           else
-            results[:matches].collect { |match| match[:attributes]["sphinx_internal_id"] }
+            return results[:matches].collect { |match| match[:attributes]["sphinx_internal_id"] }
           end
         end
       end
@@ -216,7 +216,7 @@ module ThinkingSphinx
         #   else
         #     return instances_from_results(results[:matches], options, klass)
         #   end
-        end
+        # end
       end
 
       def count(*args)
