@@ -21,15 +21,17 @@ module ThinkingSphinx
         begin
           pager = WillPaginate::Collection.create(page,
             client.limit, results[:total_found] || 0) do |collection|
-            collection.replace results[:matches].collect { |match| match[:doc] }
+            collection.replace results[:matches].collect { |match|
+              match[:attributes]["sphinx_internal_id"]
+            }
             collection.instance_variable_set :@total_entries, results[:total_found]
           end
           return (options[:include_raw] ? [pager, results] : pager)
         rescue
           if options[:include_raw]
-            return results[:matches].collect { |match| match[:doc] }, results
+            results[:matches].collect { |match| match[:attributes]["sphinx_internal_id"] }, results
           else
-            return results[:matches].collect { |match| match[:doc] }
+            results[:matches].collect { |match| match[:attributes]["sphinx_internal_id"] }
           end
         end
       end
@@ -198,19 +200,22 @@ module ThinkingSphinx
         klass   = options[:class]
         page    = options[:page] ? options[:page].to_i : 1
 
-        begin
-          pager = WillPaginate::Collection.create(page,
-            client.limit, results[:total] || 0) do |collection|
-            collection.replace instances_from_results(results[:matches], options, klass)
-            collection.instance_variable_set :@total_entries, results[:total_found]
-          end
+        # begin
+          pager = ThinkingSphinx::Collection.new(page, client.limit,
+            results[:total] || 0, results[:total_found] || 0)
+          pager.replace instances_from_results(results[:matches], options, klass)
+          # pager = WillPaginate::Collection.create(page,
+          #   client.limit, results[:total] || 0) do |collection|
+          #   collection.replace instances_from_results(results[:matches], options, klass)
+          #   collection.instance_variable_set :@total_entries, results[:total_found]
+          # end
           return (options[:include_raw] ? [pager, results] : pager)
-        rescue StandardError => err
-          if options[:include_raw]
-            return instances_from_results(results[:matches], options, klass), results
-          else
-            return instances_from_results(results[:matches], options, klass)
-          end
+        # rescue StandardError => err
+        #   if options[:include_raw]
+        #     return instances_from_results(results[:matches], options, klass), results
+        #   else
+        #     return instances_from_results(results[:matches], options, klass)
+        #   end
         end
       end
 
@@ -274,7 +279,7 @@ module ThinkingSphinx
         begin
           ::ActiveRecord::Base.logger.debug "Sphinx: #{query}"
           results = client.query query
-          ::ActiveRecord::Base.logger.debug "Sphinx Result: #{results[:matches].collect{|m| m[:doc]}.inspect}"
+          ::ActiveRecord::Base.logger.debug "Sphinx Result: #{results[:matches].collect{|m| m[:attributes]["sphinx_internal_id"]}.inspect}"
         rescue Errno::ECONNREFUSED => err
           raise ThinkingSphinx::ConnectionError, "Connection to Sphinx Daemon (searchd) failed."
         end
@@ -297,7 +302,7 @@ module ThinkingSphinx
         if klass.nil?
           results.collect { |result| instance_from_result result, options }
         else
-          ids = results.collect { |result| result[:doc] }
+          ids = results.collect { |result| result[:attributes]["sphinx_internal_id"] }
           instances = ids.length > 0 ? klass.find(
             :all,
             :conditions => {klass.primary_key.to_sym => ids},
@@ -317,7 +322,8 @@ module ThinkingSphinx
       #
       def instance_from_result(result, options)
         class_from_crc(result[:attributes]["class_crc"]).find(
-          result[:doc], :include => options[:include], :select => options[:select]
+          result[:attributes]["sphinx_internal_id"],
+          :include => options[:include], :select => options[:select]
         )
       end
 
@@ -356,15 +362,18 @@ module ThinkingSphinx
             options[key] || index_options[key] || client.send(key)
           )
         end
-
+        
+        options[:classes] = [klass] if klass
+        
         client.anchor = anchor_conditions(klass, options) || {} if client.anchor.empty?
 
         client.filters << Riddle::Client::Filter.new(
           "sphinx_deleted", [0]
         )
+        
         # class filters
         client.filters << Riddle::Client::Filter.new(
-          "class_crc", options[:classes].collect { |klass| klass.to_crc32 }
+          "subclass_crcs", options[:classes].collect { |k| k.to_crc32s }.flatten
         ) if options[:classes]
 
         # normal attribute filters
@@ -405,18 +414,13 @@ module ThinkingSphinx
         conditions.each do |key,val|
           if attributes.include?(key.to_sym)
             filters << Riddle::Client::Filter.new(
-              key.to_s,
-              val.is_a?(Range) ? val : Array(val)
+              key.to_s, filter_value(val)
             )
           else
             search_string << "@#{key} #{val} "
           end
         end
-
-        filters << Riddle::Client::Filter.new(
-          "class_crc", [klass.to_crc32]
-        ) if klass
-
+        
         return search_string, filters
       end
 
