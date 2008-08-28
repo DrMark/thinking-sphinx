@@ -4,4 +4,5 @@ coverage
 *.tmproj
 rdoc
 spec/fixtures/database.yml
+spec/fixtures/sphinx/database.yml
 tmp
