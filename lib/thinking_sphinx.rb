@@ -7,6 +7,7 @@ require 'riddle'
 require 'after_commit'
 
 require 'thinking_sphinx/core/string'
+require 'thinking_sphinx/property'
 require 'thinking_sphinx/active_record'
 require 'thinking_sphinx/association'
 require 'thinking_sphinx/attribute'
@@ -17,6 +18,7 @@ require 'thinking_sphinx/class_facet'
 require 'thinking_sphinx/facet_collection'
 require 'thinking_sphinx/field'
 require 'thinking_sphinx/index'
+require 'thinking_sphinx/source'
 require 'thinking_sphinx/rails_additions'
 require 'thinking_sphinx/search'
 require 'thinking_sphinx/deltas'
@@ -35,7 +37,7 @@ module ThinkingSphinx
   module Version #:nodoc:
     Major = 1
     Minor = 1
-    Tiny  = 6
+    Tiny  = 14
     
     String = [Major, Minor, Tiny].join('.')
   end
