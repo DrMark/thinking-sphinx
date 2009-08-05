@@ -26,7 +26,14 @@ class Friendship < ActiveRecord::Base
   define_index do
     indexes "'something'", :as => :something
     has person_id, friend_id
+    
+    set_property :latitude_attr   => :person_id
+    set_property :longitude_attr  => :person_id
   end
+end
+
+class Link < ActiveRecord::Base
+  has_and_belongs_to_many :people
 end
 
 class Person < ActiveRecord::Base
@@ -37,8 +44,9 @@ class Person < ActiveRecord::Base
   has_many :friends, :through => :friendships
   
   has_many :tags
-  
   has_many :football_teams, :through => :tags
+  
+  has_and_belongs_to_many :links
   
   define_index do
     indexes [first_name, middle_initial, last_name], :as => :name
@@ -60,6 +68,9 @@ class Person < ActiveRecord::Base
     
     has friendships.person_id, :as => :friendly_ids
     
+    has :id, :as => :latitude
+    has :id, :as => :longitude
+    
     set_property :delta => true
   end
 end
@@ -80,19 +91,41 @@ class Child < Person
 end
 
 class Alpha < ActiveRecord::Base
+  has_many :betas
+  
   define_index do
     indexes :name, :sortable => true
     
+    has :id, :as => :lat
+    has :id, :as => :lng
+    
     set_property :field_weights => {"name" => 10}
+  end
+  
+  def big_name
+    name.upcase
   end
 end
 
 class Beta < ActiveRecord::Base
+  has_many :gammas
+  
   define_index do
     indexes :name, :sortable => true
     
+    has :id, :as => :lat
+    has :id, :as => :lon
+    
     set_property :delta => true
   end
+  
+  def excerpts
+    false
+  end
+end
+
+class Gamma < ActiveRecord::Base
+  #
 end
 
 class Search < ActiveRecord::Base

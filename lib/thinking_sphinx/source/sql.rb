@@ -17,7 +17,7 @@ module ThinkingSphinx
 SELECT #{ sql_select_clause options[:offset] }
 FROM #{ @model.quoted_table_name }
   #{ all_associations.collect { |assoc| assoc.to_sql }.join(' ') }
-WHERE #{ sql_where_clause(options) }
+#{ sql_where_clause(options) }
 GROUP BY #{ sql_group_clause }
         SQL
 
@@ -30,11 +30,13 @@ GROUP BY #{ sql_group_clause }
       # so pass in :delta => true to get the delta version of the SQL.
       # 
       def to_sql_query_range(options={})
+        return nil if @index.options[:disable_range]
+        
         min_statement = adapter.convert_nulls(
-          "MIN(#{quote_column(@model.primary_key)})", 1
+          "MIN(#{quote_column(@model.primary_key_for_sphinx)})", 1
         )
         max_statement = adapter.convert_nulls(
-          "MAX(#{quote_column(@model.primary_key)})", 1
+          "MAX(#{quote_column(@model.primary_key_for_sphinx)})", 1
         )
 
         sql = "SELECT #{min_statement}, #{max_statement} " +
@@ -51,32 +53,32 @@ GROUP BY #{ sql_group_clause }
       # 
       def to_sql_query_info(offset)
         "SELECT * FROM #{@model.quoted_table_name} WHERE " +
-        "#{quote_column(@model.primary_key)} = (($id - #{offset}) / #{ThinkingSphinx.indexed_models.size})"
+        "#{quote_column(@model.primary_key_for_sphinx)} = (($id - #{offset}) / #{ThinkingSphinx.indexed_models.size})"
       end
 
       def sql_select_clause(offset)
         unique_id_expr = ThinkingSphinx.unique_id_expression(offset)
 
         (
-          ["#{@model.quoted_table_name}.#{quote_column(@model.primary_key)} #{unique_id_expr} AS #{quote_column(@model.primary_key)} "] + 
+          ["#{@model.quoted_table_name}.#{quote_column(@model.primary_key_for_sphinx)} #{unique_id_expr} AS #{quote_column(@model.primary_key_for_sphinx)} "] + 
           @fields.collect     { |field|     field.to_select_sql     } +
           @attributes.collect { |attribute| attribute.to_select_sql }
         ).compact.join(", ")
       end
 
       def sql_where_clause(options)
-        logic = [
-          "#{@model.quoted_table_name}.#{quote_column(@model.primary_key)} >= $start",
-          "#{@model.quoted_table_name}.#{quote_column(@model.primary_key)} <= $end"
-        ]
+        logic = []
+        logic += [
+          "#{@model.quoted_table_name}.#{quote_column(@model.primary_key_for_sphinx)} >= $start",
+          "#{@model.quoted_table_name}.#{quote_column(@model.primary_key_for_sphinx)} <= $end"
+        ] unless @index.options[:disable_range]
 
         if self.delta? && !@index.delta_object.clause(@model, options[:delta]).blank?
           logic << "#{@index.delta_object.clause(@model, options[:delta])}"
         end
 
         logic += (@conditions || [])
-
-        logic.join(" AND ")
+        logic.empty? ? "" : "WHERE #{logic.join(' AND ')}"
       end
 
       def sql_group_clause
@@ -86,7 +88,7 @@ GROUP BY #{ sql_group_clause }
         end
 
         (
-          ["#{@model.quoted_table_name}.#{quote_column(@model.primary_key)}"] + 
+          ["#{@model.quoted_table_name}.#{quote_column(@model.primary_key_for_sphinx)}"] + 
           @fields.collect     { |field|     field.to_group_sql     }.compact +
           @attributes.collect { |attribute| attribute.to_group_sql }.compact +
           @groupings + internal_groupings
@@ -110,7 +112,9 @@ GROUP BY #{ sql_group_clause }
       end
 
       def crc_column
-        if @model.column_names.include?(@model.inheritance_column)
+        if @model.table_exists? &&
+          @model.column_names.include?(@model.inheritance_column)
+          
           adapter.cast_to_unsigned(adapter.convert_nulls(
             adapter.crc(adapter.quote_with_table(@model.inheritance_column), true),
             @model.to_crc32

@@ -19,12 +19,14 @@ module ThinkingSphinx
   # min infix length::      1
   # mem limit::             64M
   # max matches::           1000
-  # morphology::            stem_en
+  # morphology::            nil
   # charset type::          utf-8
   # charset table::         nil
   # ignore chars::          nil
   # html strip::            false
   # html remove elements::  ''
+  # searchd_binary_name::   searchd
+  # indexer_binary_name::   indexer
   #
   # If you want to change these settings, create a YAML file at
   # config/sphinx.yml with settings for each environment, in a similar
@@ -32,7 +34,8 @@ module ThinkingSphinx
   # searchd_log_file, query_log_file, pid_file, searchd_file_path, port,
   # allow_star, enable_star, min_prefix_len, min_infix_len, mem_limit,
   # max_matches, morphology, charset_type, charset_table, ignore_chars,
-  # html_strip, html_remove_elements, delayed_job_priority.
+  # html_strip, html_remove_elements, delayed_job_priority,
+  # searchd_binary_name, indexer_binary_name.
   #
   # I think you've got the idea.
   # 
@@ -54,11 +57,13 @@ module ThinkingSphinx
       min_infix_len min_prefix_len min_word_len mlock morphology ngram_chars
       ngram_len phrase_boundary phrase_boundary_step preopen stopwords
       wordforms )
+    
+    CustomOptions = %w( disable_range )
         
     attr_accessor :config_file, :searchd_log_file, :query_log_file,
       :pid_file, :searchd_file_path, :address, :port, :allow_star,
       :database_yml_file, :app_root, :bin_path, :model_directories,
-      :delayed_job_priority
+      :delayed_job_priority, :searchd_binary_name, :indexer_binary_name
     
     attr_accessor :source_options, :index_options
     
@@ -71,10 +76,19 @@ module ThinkingSphinx
       self.reset
     end
     
-    def reset
-      self.app_root          = RAILS_ROOT if defined?(RAILS_ROOT)
-      self.app_root          = Merb.root  if defined?(Merb)
-      self.app_root        ||= app_root
+    def self.configure(&block)
+      yield instance
+      instance.reset(instance.app_root)
+    end
+    
+    def reset(custom_app_root=nil)
+      if custom_app_root
+        self.app_root = custom_app_root
+      else
+        self.app_root          = RAILS_ROOT if defined?(RAILS_ROOT)
+        self.app_root          = Merb.root  if defined?(Merb)
+        self.app_root        ||= app_root
+      end
       
       @configuration = Riddle::Configuration.new
       @configuration.searchd.address    = "127.0.0.1"
@@ -94,9 +108,11 @@ module ThinkingSphinx
       
       self.source_options  = {}
       self.index_options   = {
-        :charset_type => "utf-8",
-        :morphology   => "stem_en"
+        :charset_type => "utf-8"
       }
+      
+      self.searchd_binary_name = "searchd"
+      self.indexer_binary_name = "indexer"
             
       parse_config
       
@@ -141,6 +157,8 @@ module ThinkingSphinx
     # messy dependencies issues).
     # 
     def load_models
+      return if defined?(Rails) && Rails.configuration.cache_classes
+      
       self.model_directories.each do |base|
         Dir["#{base}**/*.rb"].each do |file|
           model_name = file.gsub(/^#{base}([\w_\/\\]+)\.rb/, '\1')
@@ -156,6 +174,8 @@ module ThinkingSphinx
             model_name.gsub!(/.*[\/\\]/, '').nil? ? next : retry
           rescue NameError
             next
+          rescue StandardError
+            puts "Warning: Error loading #{file}"
           end
         end
       end
@@ -201,6 +221,24 @@ module ThinkingSphinx
       @configuration.searchd.query_log = file
     end
     
+    def client
+      client = Riddle::Client.new address, port
+      client.max_matches = configuration.searchd.max_matches || 1000
+      client
+    end
+    
+    def models_by_crc
+      @models_by_crc ||= begin
+        ThinkingSphinx.indexed_models.inject({}) do |hash, model|
+          hash[model.constantize.to_crc32] = model
+          Object.subclasses_of(model.constantize).each { |subclass|
+            hash[subclass.to_crc32] = subclass.name
+          }
+          hash
+        end
+      end
+    end
+    
     private
     
     # Parse the config/sphinx.yml file - if it exists - then use the attribute
@@ -213,10 +251,11 @@ module ThinkingSphinx
       conf = YAML::load(ERB.new(IO.read(path)).result)[environment]
       
       conf.each do |key,value|
-        self.send("#{key}=", value) if self.methods.include?("#{key}=")
+        self.send("#{key}=", value) if self.respond_to?("#{key}=")
         
         set_sphinx_setting self.source_options, key, value, SourceOptions
         set_sphinx_setting self.index_options,  key, value, IndexOptions
+        set_sphinx_setting self.index_options,  key, value, CustomOptions
         set_sphinx_setting @configuration.searchd, key, value
         set_sphinx_setting @configuration.indexer, key, value
       end unless conf.nil?
@@ -233,8 +272,8 @@ module ThinkingSphinx
       if object.is_a?(Hash)
         object[key.to_sym] = value if allowed.include?(key.to_s)
       else
-        object.send("#{key}=", value) if object.methods.include?("#{key}")
-        send("#{key}=", value) if self.methods.include?("#{key}")
+        object.send("#{key}=", value) if object.respond_to?("#{key}")
+        send("#{key}=", value) if self.respond_to?("#{key}")
       end
     end
   end

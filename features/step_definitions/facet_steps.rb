@@ -3,6 +3,16 @@ When "I am requesting facet results$" do
   @method  = :facets
 end
 
+When /^I am requesting just the facet (\w+)$/ do |facet|
+  @results = nil
+  @options[:facets] = facet.downcase.to_sym
+end
+
+When /^I am requesting just the facets (\w+) and (\w+)$/ do |one, two|
+  @results = nil
+  @options[:facets] = [one.downcase.to_sym, two.downcase.to_sym]
+end
+
 When "I want classes included" do
   @options[:class_facet] = true
 end
@@ -12,7 +22,7 @@ When "I don't want classes included" do
 end
 
 When "I want all possible attributes" do
-  @options[:all_attributes] = true
+  @options[:all_facets] = true
 end
 
 When /^I drill down where (\w+) is (\w+)$/ do |facet, value|
